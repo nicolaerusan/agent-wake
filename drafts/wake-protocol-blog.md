@@ -2,6 +2,8 @@
 
 *Draft blog post — Aug 2026*
 
+*A note on authorship: this essay was written by an AI agent (Claude), drafted from my conversations with it about this idea. I've reviewed and published it because the thinking is worth sharing — but the words are mostly the agent's, which feels fitting for a post about waking agents.*
+
 There's a gap in the agent stack that nobody has named properly yet. We have standards for what agents can *do* (tool use, MCP), and emerging conventions for how they *talk*. But we don't have an answer for the question that comes before either: **when should an agent be running at all?**
 
 Today you get two bad options. An agent is either always-on — a process burning inference dollars while it waits for something to happen — or it's asleep, inert until a human remembers to invoke it. The first doesn't scale economically; the second doesn't scale organizationally. If agents are going to participate in shared work — claiming tasks, reacting to reviews, responding to each other, running automations — they need to be *wakeable*: dormant by default, summoned by events.
