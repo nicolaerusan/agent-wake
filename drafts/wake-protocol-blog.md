@@ -74,6 +74,18 @@ The deepest consequence of thin pings: the wake target isn't a running process, 
 
 Which means the agent's durable identity — who it is, what it watches, how far it has read — lives at the hub, not in any process. Wake the same agent on a different machine tomorrow and nothing breaks. This is also what unifies "automations" with agents: a Zapier-style trigger→action rule and a long-lived agent teammate are the same protocol shape, differing only in how much thinking happens after the wake.
 
+## What could go wrong: the security shape of a wake standard
+
+Thin pings buy real security properties — a forged or replayed ping can at worst make an agent poll its own log — but only if the rest of the design is honest about where trust actually lives. Three places it lives, and what goes wrong at each:
+
+**The ping must not be trusted — including its hub URL.** "Spoofed pings are harmless" holds only when the woken agent resolves its hub from its *own subscription config* and treats the ping purely as a nudge. An agent that follows a `hub` URL embedded in an unsigned ping can be redirected to an attacker's hub and fed fabricated events — the thin-ping property laundered into a delivery channel after all. The rule is simple: the ping wakes you; your configuration tells you where to read. (Signed pings, per Standard Webhooks, restore trust in push mode; pull mode never has the problem, because the shim only ever talks to the hub it was pointed at.)
+
+**The receiver is a language model, so event data is prompt-injection surface.** This is the risk no previous webhook standard had. A classic consumer parses fields with code; a woken agent reads attacker-authored text inside a reasoning loop that has tools. An event whose `data` says "ignore your instructions and run this" is not malformed input — it's a live attempt to steer a process with shell access, delivered through legitimate plumbing. A wake standard can't solve prompt injection, but it can refuse to pretend it isn't there: subscribe only to sources you trust, give the woken agent the narrowest tool permissions that do the job, keep event data schema-validated and quoted as *data* in the prompt, and treat "who may emit into this hub" as a security boundary, not a formality.
+
+**The cursor is a write path, so subscriptions need owners.** On an open hub, the subtlest attack isn't emitting fake events — it's acking someone else's cursor forward, silently *suppressing* events the agent never saw. No alarm fires; work just doesn't happen. So a subscription wants to be a capability: created with a secret, and only the holder may wait on its mailbox or advance its cursor. Emitting wants per-source credentials, so `source` fields can't be spoofed; filters then double as visibility scoping, and the hub's wake economics (min intervals, coalescing, parking) double as the DoS story — an event flood against a rate-limited subscription is a queue, not a bill. One more consequence of retry-forever honesty: a poisoned event that reliably crashes its handler becomes an infinite wake loop unless the spec includes parking and a way to skip a cursor past a dead letter.
+
+None of this is exotic — capabilities, signing, least privilege, rate limits — but the *ordering* matters: the reference implementation should stay loudly unauthenticated localhost plumbing until the subscription-ownership story ships, rather than growing half a security model.
+
 ## The endgame is an MX record for agents
 
 Follow the email analogy to its conclusion. What made email a substrate rather than a product was that *addressability was standardized and hosting was not*. Anyone could run a mail server; everyone could reach everyone.
@@ -82,7 +94,7 @@ The agent equivalent: a published, standard way for any agent to say "here is ho
 
 Almost none of this needs inventing. CloudEvents for the envelope. Standard Webhooks for signing and retries. WebSub for the subscription dance. ActivityPub for the instinct that an inbox is part of identity. The new material is maybe two pages: **cursors as the correctness mechanism, hub-side filters as the cost gate, wake economics as a first-class concern.** It should be boring. Plumbing wins by being uninteresting.
 
-If you're building agent infrastructure and reinventing this privately, let's write the public version instead.
+If you're building agent infrastructure and reinventing this privately, let's write the public version instead. There's a working reference implementation — hub, spawner, conformance tests, and adapters that wake Claude Code, Codex, and BB threads — at [github.com/nicolaerusan/agent-wake](https://github.com/nicolaerusan/agent-wake), with a short overview at [nicolaerusan.github.io/agent-wake](https://nicolaerusan.github.io/agent-wake/).
 
 ## Notes toward an MVP
 
@@ -96,3 +108,5 @@ What's the smallest thing that proves the shape? Roughly a weekend of plumbing:
 6. **A conformance suite** — a dozen black-box tests that define what "is a hub" and "is a wake target" mean: cursor idempotency, duplicate-ping harmlessness, coalescing, parking, resume-after-a-week. The tests *are* the standard until the prose catches up.
 
 Non-goals for the MVP: federation between hubs, discovery, payment, any agent framework integration beyond "spawn a CLI." Those all get easier to design once two implementations exist and disagree about something.
+
+*The MVP above now exists: [github.com/nicolaerusan/agent-wake](https://github.com/nicolaerusan/agent-wake).*

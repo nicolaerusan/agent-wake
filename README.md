@@ -80,6 +80,15 @@ npm test
 
 Non-goals for the MVP: hub federation, discovery, payment, framework integrations beyond "spawn a CLI."
 
+## Security posture (read before pointing this at anything real)
+
+The reference hub is **deliberately unauthenticated localhost plumbing**. Do not bind it to the internet. Specifically:
+
+- **Anyone who can reach the hub can do anything**: emit events (with any spoofed `source`), read the whole log, create subscriptions, and — subtlest — **ack someone else's cursor forward, silently suppressing their events**. Subscription ownership (create-time secrets, per-source emit credentials) is the first post-MVP security milestone; until then, the trust boundary is "who can reach the port."
+- **Event data is prompt-injection surface.** A woken agent reads attacker-authored `data` inside a reasoning loop that has tools. Only subscribe to event sources you trust, and give the woken agent the narrowest permissions that do the job (e.g. `--allowedTools 'Bash(curl:*)'`, not full access).
+- **Never trust the ping — including its `hub` URL.** "Forged pings are harmless" only holds if the agent reads from its *configured* hub. In pull mode this is automatic (the spawner only talks to `HUB_URL`); push mode requires signed pings before it ships.
+- **Wake economics are the DoS defense**: min intervals, coalescing, and parking keep an event flood from becoming a token bill. The spawner backs off exponentially when the agent fails, but a poison event still re-wakes until acked or skipped — dead-lettering is on the roadmap.
+
 ## Prior art we steal from
 
 CloudEvents (envelope) · Standard Webhooks (signing/retries) · WebSub (subscribe/verify/deliver) · ActivityPub (inbox as identity) · SMTP/MX (addressability standardized, hosting not).
