@@ -19,27 +19,48 @@ Two delivery modes over one model:
 
 The wake target is a *spawner*, not a process: a cold-started agent reconstructs everything from hub + subscription + cursor.
 
-## Quickstart (runs locally, zero dependencies, Node ≥20)
+## Install (one line, zero dependencies, Node ≥20)
 
-Three terminals — hub, spawner, and you playing the world:
+```sh
+npm install -g github:nicolaerusan/agent-wake     # or npx github:nicolaerusan/agent-wake <cmd>
+```
+
+## Quickstart
+
+Three terminals — hub, watcher, and you playing the world:
 
 ```sh
 # 1. the hub — durable event log + subscriptions + mailbox
-node hub.mjs                            # http://localhost:7777, data/ for state
+agent-wake hub                          # http://localhost:7777, data/ for state
 
-# 2. register a subscription, start the spawner (the tiny always-on shim)
-SUB=$(curl -s -X POST localhost:7777/subscriptions -d '{}' | jq -r .id)
-HUB_URL=http://localhost:7777 SUB_ID=$SUB \
-  WAKE_CMD='node examples/echo-agent.mjs' node spawner.mjs
+# 2. the watcher — wakes an agent CLI on every event (subscription auto-created)
+agent-wake watch --claude               # wake Claude Code
+agent-wake watch --codex                # ...or Codex
+agent-wake watch --cmd 'node examples/echo-agent.mjs'   # ...or anything
 
 # 3. emit an event — watch the agent cold-start, read, ack, exit
-curl -X POST localhost:7777/events -d '{"type":"task.created","data":{"title":"hello"}}'
+agent-wake emit task.created --data '{"title":"hello"}'
 ```
 
-To wake a real agent instead of the echo demo, change one string:
+`watch --claude` / `--codex` shell out to `claude -p` / `codex exec` with a
+standard wake prompt: read the thin ping from `$WAKE_PING`, fetch events
+after your cursor from the hub, handle them, ack. Anything after `--` is
+passed through to the agent CLI. Filter with `--types a,b`, reuse a
+subscription with `--sub sub_x`, point elsewhere with `--hub URL`.
+
+The raw pieces are still there for scripting: `node hub.mjs`, `node
+spawner.mjs` (env-driven), plus `agent-wake sub` / `emit` / `events`.
+
+## BB plugin
+
+The repo doubles as a [bb](https://getbb.app) plugin collection —
+`bb-plugin-agent-wake/` wakes BB threads instead of CLI processes: a
+background service long-polls a subscription and spawns a thread per thin
+ping, with your standing instructions in the prompt. Plus `bb wake emit` /
+`bb wake status` and a skill teaching agents the ack protocol.
 
 ```sh
-WAKE_CMD='claude -p "You were woken. Ping in $WAKE_PING — read your pending events from the hub, handle them, ack your cursor."'
+bb plugin install https://github.com/nicolaerusan/agent-wake --plugin agent-wake
 ```
 
 Run the end-to-end tests (hub + spawner + real spawned agent processes, black-box over HTTP):
