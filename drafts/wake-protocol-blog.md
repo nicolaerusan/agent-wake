@@ -84,7 +84,7 @@ Thin pings buy real security properties — a forged or replayed ping can at wor
 
 **The cursor is a write path, so subscriptions need owners.** On an open hub, the subtlest attack isn't emitting fake events — it's acking someone else's cursor forward, silently *suppressing* events the agent never saw. No alarm fires; work just doesn't happen. So a subscription wants to be a capability: created with a secret, and only the holder may wait on its mailbox or advance its cursor. Emitting wants per-source credentials, so `source` fields can't be spoofed; filters then double as visibility scoping, and the hub's wake economics (min intervals, coalescing, parking) double as the DoS story — an event flood against a rate-limited subscription is a queue, not a bill. One more consequence of retry-forever honesty: a poisoned event that reliably crashes its handler becomes an infinite wake loop unless the spec includes parking and a way to skip a cursor past a dead letter.
 
-None of this is exotic — capabilities, signing, least privilege, rate limits — but the *ordering* matters: the reference implementation should stay loudly unauthenticated localhost plumbing until the subscription-ownership story ships, rather than growing half a security model.
+None of this is exotic — capabilities, signing, least privilege, rate limits — but the *ordering* matters: the reference implementation should stay loudly unauthenticated localhost plumbing until the subscription-ownership story ships, rather than growing half a security model. The full threat model — eight risks and their designed fixes, in shipping order — is maintained as [SECURITY.md in the repo](https://github.com/nicolaerusan/agent-wake/blob/main/SECURITY.md).
 
 ## The endgame is an MX record for agents
 

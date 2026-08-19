@@ -82,7 +82,7 @@ Non-goals for the MVP: hub federation, discovery, payment, framework integration
 
 ## Security posture (read before pointing this at anything real)
 
-The reference hub is **deliberately unauthenticated localhost plumbing**. Do not bind it to the internet. Specifically:
+The reference hub is **deliberately unauthenticated localhost plumbing**. Do not bind it to the internet. The full threat model — eight risks, current status of each, and the designed fixes in shipping order — lives in [SECURITY.md](SECURITY.md). The short version:
 
 - **Anyone who can reach the hub can do anything**: emit events (with any spoofed `source`), read the whole log, create subscriptions, and — subtlest — **ack someone else's cursor forward, silently suppressing their events**. Subscription ownership (create-time secrets, per-source emit credentials) is the first post-MVP security milestone; until then, the trust boundary is "who can reach the port."
 - **Event data is prompt-injection surface.** A woken agent reads attacker-authored `data` inside a reasoning loop that has tools. Only subscribe to event sources you trust, and give the woken agent the narrowest permissions that do the job (e.g. `--allowedTools 'Bash(curl:*)'`, not full access).
