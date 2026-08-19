@@ -25,6 +25,7 @@ if (!HUB || !SUB || !CMD) {
 console.log(`spawner: watching ${HUB} sub=${SUB} -> ${CMD}`);
 
 let backoffMs = 1000;
+let failBackoffMs = 5000;
 for (;;) {
   let ping = null;
   try {
@@ -49,6 +50,12 @@ for (;;) {
     env: { ...process.env, WAKE_PING: pingJson },
   });
   if (result.status !== 0) {
-    console.error(`spawner: agent exited ${result.status}; cursor not our problem — hub keeps the events`);
+    // The events stay pending on the hub, so the next poll would re-wake
+    // immediately — back off so a broken agent cannot spin a wake storm.
+    console.error(`spawner: agent exited ${result.status}; hub keeps the events, retrying in ${failBackoffMs}ms`);
+    await new Promise((r) => setTimeout(r, failBackoffMs));
+    failBackoffMs = Math.min(failBackoffMs * 2, 300_000);
+  } else {
+    failBackoffMs = 5000;
   }
 }

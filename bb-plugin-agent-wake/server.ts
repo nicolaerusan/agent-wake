@@ -151,6 +151,15 @@ export default async function plugin(bb: BbPluginApi) {
           });
           bb.log.info(`wake: spawned thread ${thread.id}`);
 
+          // One wake at a time: wait for the woken thread to finish before
+          // polling again, otherwise the still-unacked events re-wake us and
+          // we spawn a duplicate thread for the same work.
+          try {
+            await bb.sdk.threads.wait({ threadId: thread.id, status: "idle" });
+          } catch {
+            // wait is best-effort; the min-interval below still paces us
+          }
+
           // Wake economics: events landing during this window coalesce into
           // the next ping, so a chatty source cannot spawn a thread storm.
           await sleep(Math.max(5, Number(minIntervalS) || 30) * 1000, signal);
