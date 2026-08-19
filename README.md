@@ -19,6 +19,35 @@ Two delivery modes over one model:
 
 The wake target is a *spawner*, not a process: a cold-started agent reconstructs everything from hub + subscription + cursor.
 
+## Quickstart (runs locally, zero dependencies, Node ≥20)
+
+Three terminals — hub, spawner, and you playing the world:
+
+```sh
+# 1. the hub — durable event log + subscriptions + mailbox
+node hub.mjs                            # http://localhost:7777, data/ for state
+
+# 2. register a subscription, start the spawner (the tiny always-on shim)
+SUB=$(curl -s -X POST localhost:7777/subscriptions -d '{}' | jq -r .id)
+HUB_URL=http://localhost:7777 SUB_ID=$SUB \
+  WAKE_CMD='node examples/echo-agent.mjs' node spawner.mjs
+
+# 3. emit an event — watch the agent cold-start, read, ack, exit
+curl -X POST localhost:7777/events -d '{"type":"task.created","data":{"title":"hello"}}'
+```
+
+To wake a real agent instead of the echo demo, change one string:
+
+```sh
+WAKE_CMD='claude -p "You were woken. Ping in $WAKE_PING — read your pending events from the hub, handle them, ack your cursor."'
+```
+
+Run the end-to-end tests (hub + spawner + real spawned agent processes, black-box over HTTP):
+
+```sh
+npm test
+```
+
 ## MVP plan
 
 1. `packages/hub` — one process, SQLite; `POST /events`, `GET /events?after=`, subscription CRUD, mailbox long-poll, ack.

@@ -1,0 +1,14 @@
+{
+  "name": "agent-wake",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Reference implementation of a wake standard for agents: event hub, subscriptions with cursors, thin pings, pull-mode spawner.",
+  "scripts": {
+    "hub": "node hub.mjs",
+    "test": "node --test test/e2e.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
