@@ -34,7 +34,9 @@ Everything below is about the places those properties *don't* cover.
 
 **Status:** open on the reference hub (any caller can ack any subscription).
 
-**Fix (first security milestone): subscriptions as capabilities.** Creating a subscription returns a `secret`; `wait` and `ack` require it (`Authorization: Bearer <secret>`). The subscription id stays shareable (it appears in pings); the secret never leaves the owner. This is a small, contained change to `hub.mjs` + spawner and kills the whole class.
+**Fix (first security milestone): subscriptions as capabilities.** Creating a subscription returns a high-entropy bearer token; subscription status, filtered reads, `wait`, and `ack` require it. The subscription id stays shareable and is only an address. The token grants authority over one subscription, not the whole hub.
+
+Authentication is necessary but not sufficient. The current `ack` implementation accepts malformed and future cursors. The hub must require a safe integer, monotonic progress, a cursor no later than the current or delivered bound, and preferably a cursor corresponding to a matching delivered event. A deliberate bypass belongs in a separate audited `skip` operation. Otherwise, a buggy or prompt-injected *authorized* agent can still suppress current or future work.
 
 **Also helps:** an append-only **ack audit log** (who advanced which cursor, when), so suppression is at least detectable after the fact.
 
@@ -42,9 +44,9 @@ Everything below is about the places those properties *don't* cover.
 
 **Attack:** "forged pings are harmless" holds only if the woken agent reads from its *configured* hub. An agent that follows the `hub` URL inside an unsigned ping can be redirected to an attacker's hub and fed fabricated events — the thin ping laundered back into a delivery channel.
 
-**Status:** pull mode is immune by construction (the spawner only ever contacts `HUB_URL` from its own config; the ping arrives *from* that connection). The risk exists only for future push/webhook mode.
+**Status:** pull mode obtains its ping through the spawner's configured `HUB_URL`, which is a strong starting point, but the child prompts currently follow the `hub` field returned inside that ping. The spawner should validate or replace the ping's hub and subscription fields before starting the child. Future push/webhook delivery also needs signed pings.
 
-**Fix:** push mode must not ship without **signed thin pings** (Standard Webhooks HMAC headers + WebSub-style verification at subscribe time), and the integrator rule stands regardless: *the ping wakes you; your configuration tells you where to read.*
+**Fix:** the wake watcher is the trust anchor: *the doorbell wakes you; configuration tells you where to read.* Push mode must not ship without **signed thin pings** (Standard Webhooks HMAC headers + WebSub-style verification at subscribe time).
 
 ### 4. Source spoofing
 
@@ -52,13 +54,15 @@ Everything below is about the places those properties *don't* cover.
 
 **Status:** open on the reference hub.
 
-**Fix: per-source emit credentials.** Emitters get tokens bound to a source prefix (token X may only emit `source=github-bridge`, perhaps only types `github.*`). The hub stamps `source` from the credential rather than trusting the body. Filters then double as visibility scoping: a subscription only sees the types it was granted.
+**Fix: per-source emit credentials.** Emitters get tokens bound to a source and permitted event types (token X may emit as `github-bridge`, perhaps only types `github.*`). The hub stamps `source` from the credential rather than trusting the body. Provenance is not content safety: an authenticated GitHub bridge can still faithfully relay attacker-authored issue text.
 
 ### 5. Wake storms — economic DoS
 
 **Attack:** agents are the one receiver where invocation costs real money. An event flood against an unprotected subscription isn't a full queue, it's a token bill. Even benign chatty sources can bankrupt a well-intentioned subscriber.
 
 **Status:** partially defended. Coalescing is free by design (300 pending events is still one ping; the spawner runs one agent at a time), the BB plugin enforces a minimum interval between wakes and waits for the woken thread to finish, and the spawner backs off exponentially when the agent fails.
+
+A CLI agent that exits successfully without advancing the cursor is currently woken again immediately. Exit status alone is not progress.
 
 **Fix: wake economics enforced hub-side, per subscription** — `min_interval_s`, `batch_window_s`, parking after N failed/unacked wakes, and optionally a wakes-per-day budget. The hub is the right enforcement point because it fires before the expensive agent boots. This is the genuinely novel section of the spec; no previous webhook standard needed it.
 
@@ -76,21 +80,45 @@ Everything below is about the places those properties *don't* cover.
 
 **Status:** open; acceptable only on localhost.
 
-**Fix:** read scoping via subscription capabilities (you read through your subscription's filter, not the raw log), TLS when the hub leaves localhost, and guidance that stays true at every layer: **don't put secrets in event payloads — put references.** The thin-ping philosophy applies to your own events too: carry a pointer, let the reader fetch with its own credentials.
+**Fix:** read through a subscription-native endpoint such as `GET /subscriptions/:id/events`, requiring the subscription capability and applying its stored filter server-side. Today filters gate wakes but the example agents and generated prompts fetch the global log without applying the subscription filter, so filters are not yet an integrity or confidentiality boundary. The raw log should be disabled or operator-only outside explicit local debugging.
+
+Use TLS when the hub leaves localhost, and follow guidance that stays true at every layer: **don't put secrets in event payloads — put references.** This is data minimization, not complete confidentiality: repository names, customer IDs, URLs, timing, and topology can still be sensitive, and a signed URL is itself a secret.
 
 ### 8. Spawner execution surface
 
 **Notes for completeness:** the spawner passes the ping to the agent via environment variable and stdin — it is never interpolated into the shell command, so a hostile ping cannot inject shell syntax. `WAKE_CMD` itself is trusted operator configuration, equivalent to cron: whoever can set it already owns the account. The npm package runs no install scripts.
 
+### 9. At-least-once processing and duplicate side effects
+
+**Risk:** an agent performs an external write, then crashes before acknowledging its event. The event remains pending and the write may happen again on retry.
+
+**Status:** this is inherent in any cursor protocol that cannot share a transaction with every destination system. The current successful-path tests demonstrate ordered cursor progress, not exactly-once external effects.
+
+**Mitigation:** specify at-least-once processing. Give every event a stable id and require consumers to use it as an idempotency key, keep a destination-side receipt, or inspect whether an intended external effect already happened before repeating it.
+
+## Security is layered
+
+The hub decides **what may wake, what may be read, and how often a run may start**. The agent runner or hosted agent service decides **what that run may do**. A production integration should combine:
+
+- a filesystem sandbox limited to the intended checkout or disposable worktree;
+- network disabled or restricted to explicit destinations;
+- a deny-by-default tool surface and scoped external-service credentials;
+- human approval for publishing, merging, deleting, deploying, or spending;
+- runtime, token, concurrency, and daily cost limits; and
+- audit records for wakes, cursor changes, approvals, and external writes.
+
+Codex local agents support filesystem sandboxing, approval policies, and network controls; Codex cloud uses isolated containers with agent-phase internet off by default. Claude Code supports tool allow/ask/deny rules plus filesystem and network sandboxing. These provider controls reduce the effect of prompt injection, but do not replace source authentication, filtered reads, progress validation, or wake budgets in the hub. See [the concrete architecture guide](ARCHITECTURE.md#what-restrictions-can-an-agent-service-add) for deployment examples and official product documentation.
+
 ## Hardening roadmap (in order)
 
-1. **Subscription capabilities** — create-time secret required for `wait`/`ack` (kills #2, enables #6/#7 controls). Small change; first milestone.
-2. **Per-source emit credentials** with hub-stamped `source` (kills #4, shrinks #1's surface).
-3. **Hub-enforced wake economics** — `min_interval_s`, `batch_window_s`, parking, budgets (closes #5).
-4. **Dead-lettering + capability-gated cursor skip** (closes #6).
-5. **Signed pings + subscribe-time verification** — the precondition for shipping push mode at all (#3).
-6. **Schema'd event types + size caps** (structural help for #1).
-7. **Ack audit log** (detection for #2), TLS guidance, read scoping (#7).
+1. **Adversarial conformance tests and honest semantics** — filtered-read isolation, malformed/future ack rejection, unauthorized operations, crash-before-ack replay, simultaneous wakes, and exit-zero-without-progress. Specify at-least-once processing (#9).
+2. **Subscription-native reads and capabilities** — a create-time token required for subscription status, filtered events, `wait`, and `ack`; strict cursor validation (#2/#7).
+3. **Per-source emit credentials** with a hub-stamped source and event-type scope (#4).
+4. **Hub-enforced wake economics** — `min_interval_s`, `batch_window_s`, no-progress detection, parking, and budgets (#5).
+5. **Dead-lettering + separately authorized, audited cursor skip** (#6).
+6. **Signed pings + subscribe-time verification** — the precondition for shipping push mode (#3).
+7. **Schema'd event types + size caps** — deterministic structural help before optional model triage (#1).
+8. **Ack audit log**, TLS guidance, credential rotation/revocation, and an operator-only raw-log path.
 
 The ordering principle: the reference implementation stays *loudly* unauthenticated localhost plumbing until subscription ownership ships, rather than growing half a security model that invites misplaced trust.
 

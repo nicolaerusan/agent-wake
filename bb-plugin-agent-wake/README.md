@@ -1,13 +1,19 @@
 # bb-plugin-agent-wake
 
-Wake BB threads from [agent-wake](https://github.com/nicolaerusan/agent-wake) hub events.
+Wake BB threads from an [agent-wake](https://github.com/nicolaerusan/agent-wake) event inbox.
 
-A background service long-polls a hub subscription's mailbox (outbound
-connection only — NAT-proof). On each thin ping it spawns a thread in your
-configured project whose prompt tells the agent to read its pending events
-from the hub, handle them per your standing instructions, and ack its
-cursor. The plugin holds no event state; the hub's cursor is the truth, so
-duplicate or missed wakes are harmless.
+The plugin is the **wake watcher**: a small background service that long-polls
+one wake rule in the event inbox (outbound connection only — NAT-proof). When
+the doorbell rings, it starts a BB thread in your configured project. That
+thread is the **working agent**: it reads pending events, handles them under the
+project's permissions and your standing instructions, and records its progress.
+The plugin holds no event state; the inbox's cursor is the truth, so duplicate
+or missed wakes are harmless.
+
+See [the concrete architecture guide](../ARCHITECTURE.md) for the same roles in
+Claude Code, Codex, desktop, and hosted-agent deployments. The current hub is
+unauthenticated localhost plumbing; review [SECURITY.md](../SECURITY.md) before
+using real or sensitive events.
 
 ## Install
 

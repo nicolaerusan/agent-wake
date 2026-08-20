@@ -52,6 +52,22 @@
   .flow {
     display: block; margin: 1.5rem auto; max-width: 100%;
   }
+  .flow-mobile { display: none; }
+  @media (max-width: 520px) {
+    main { padding-top: 3rem; }
+    .flow-desktop { display: none; }
+    .flow-mobile {
+      display: grid; justify-items: stretch; gap: .35rem;
+      margin: 1.5rem 0; font-family: var(--mono); font-size: .8rem;
+    }
+    .flow-mobile .step {
+      padding: .65rem .75rem; border: 1px solid var(--border);
+      border-radius: 8px; background: var(--panel); text-align: center;
+    }
+    .flow-mobile .inbox { border-color: #59c2ff; }
+    .flow-mobile .agent { border-color: #aad94c; }
+    .flow-mobile .arrow { color: var(--muted); text-align: center; }
+  }
   .prim { border-left: 3px solid var(--border); padding-left: 1rem; margin: 1rem 0; }
   .prim b { display: block; }
   .prim.hub { border-color: #59c2ff; }
@@ -63,9 +79,10 @@
 <body>
 <main>
   <h1>agent-wake<span class="dot">.</span></h1>
-  <p class="tagline">Wake agents from events. A vendor-neutral hub + subscription + thin-ping standard — agents sleep for free and cold-start with zero lost state.</p>
+  <p class="tagline">Wake agents from events. An event inbox remembers the work, a small wake watcher starts a fresh agent, and durable progress means a sleeping agent misses nothing.</p>
   <div class="links">
     <a href="https://github.com/nicolaerusan/agent-wake">GitHub →</a>
+    <a href="https://github.com/nicolaerusan/agent-wake/blob/main/TRY_IT.md">Try it in five minutes →</a>
     <a href="https://nicolaerusan.com/writing/push-vs-pull-agents">The essay →</a>
   </div>
 
@@ -73,34 +90,44 @@
   <p>Agents today either <b>poll</b> (burn tokens asking “anything new?”) or hold <b>always-on processes</b> waiting for webhooks (fragile, needs a public URL, loses events on crash). agent-wake unifies push and pull: events live in a durable log, agents hold cursors, and a wake is just a hint that something is waiting. Push becomes a latency optimization over pull — so delivery needs no exactly-once machinery.</p>
 
   <h2>Three primitives</h2>
-  <svg class="flow" viewBox="0 0 680 150" role="img" aria-label="Event flow: world emits events to the hub; the hub sends a thin ping to the spawner; the spawner cold-starts the agent; the agent reads events after its cursor and acks.">
+  <svg class="flow flow-desktop" viewBox="0 0 680 150" role="img" aria-label="Event flow: something happens; the event inbox rings a doorbell for the wake watcher; the watcher starts a working agent; the agent reads pending work and records progress.">
     <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8" fill="none" stroke="#9aa3b0" stroke-width="1.5"/></marker></defs>
     <g font-family="ui-monospace,Menlo,monospace" font-size="13" fill="#e6e9ee">
-      <rect x="8" y="45" width="90" height="40" rx="8" fill="#12151a" stroke="#232830"/>
-      <text x="53" y="70" text-anchor="middle">world</text>
-      <rect x="170" y="45" width="110" height="40" rx="8" fill="#12151a" stroke="#59c2ff"/>
-      <text x="225" y="70" text-anchor="middle">hub</text>
-      <rect x="360" y="45" width="110" height="40" rx="8" fill="#12151a" stroke="#232830"/>
-      <text x="415" y="70" text-anchor="middle">spawner</text>
-      <rect x="550" y="45" width="110" height="40" rx="8" fill="#12151a" stroke="#aad94c"/>
-      <text x="605" y="70" text-anchor="middle">agent</text>
+      <rect x="0" y="45" width="120" height="40" rx="8" fill="#12151a" stroke="#232830"/>
+      <text x="60" y="70" text-anchor="middle">⚡ event source</text>
+      <rect x="160" y="45" width="120" height="40" rx="8" fill="#12151a" stroke="#59c2ff"/>
+      <text x="220" y="70" text-anchor="middle">▣ event inbox</text>
+      <rect x="350" y="45" width="130" height="40" rx="8" fill="#12151a" stroke="#232830"/>
+      <text x="415" y="70" text-anchor="middle">◷ wake watcher</text>
+      <rect x="540" y="45" width="140" height="40" rx="8" fill="#12151a" stroke="#aad94c"/>
+      <text x="610" y="70" text-anchor="middle">◆ working agent</text>
     </g>
     <g stroke="#9aa3b0" stroke-width="1.5" fill="none">
-      <line x1="98" y1="65" x2="168" y2="65" marker-end="url(#a)"/>
-      <line x1="280" y1="65" x2="358" y2="65" marker-end="url(#a)"/>
-      <line x1="470" y1="65" x2="548" y2="65" marker-end="url(#a)"/>
-      <path d="M 600 88 Q 480 135 235 88" marker-end="url(#a)"/>
+      <line x1="120" y1="65" x2="158" y2="65" marker-end="url(#a)"/>
+      <line x1="280" y1="65" x2="348" y2="65" marker-end="url(#a)"/>
+      <line x1="480" y1="65" x2="538" y2="65" marker-end="url(#a)"/>
+      <path d="M 610 88 Q 480 135 230 88" marker-end="url(#a)"/>
     </g>
     <g font-family="ui-monospace,Menlo,monospace" font-size="11" fill="#9aa3b0">
-      <text x="133" y="55" text-anchor="middle">events</text>
-      <text x="319" y="55" text-anchor="middle">thin ping</text>
-      <text x="509" y="55" text-anchor="middle">spawn</text>
-      <text x="415" y="130" text-anchor="middle">read after cursor, ack</text>
+      <text x="140" y="55" text-anchor="middle">events</text>
+      <text x="314" y="55" text-anchor="middle">🔔 doorbell</text>
+      <text x="510" y="55" text-anchor="middle">start agent</text>
+      <text x="415" y="130" text-anchor="middle">read work, record progress</text>
     </g>
   </svg>
-  <div class="prim hub"><b>Hub</b>An append-only log of typed events with stable IDs, plus subscriptions. One tiny process (or a service). The log is the truth.</div>
-  <div class="prim sub"><b>Subscription</b>A filter + a cursor + wake economics (min intervals, coalescing). The cursor is the agent’s entire memory of “where was I?”.</div>
-  <div class="prim ping"><b>Thin ping</b><code>{hub, subscription, cursor, pending}</code> — never a payload. The woken agent reads events after its cursor from the hub and acks. Duplicate or stale pings are harmless by construction.</div>
+  <div class="flow-mobile" role="img" aria-label="Event source sends an event to the event inbox. The inbox rings a doorbell for the wake watcher. The watcher starts a working agent, which reads work and records progress.">
+    <div class="step">⚡ Event source</div>
+    <div class="arrow">events ↓</div>
+    <div class="step inbox">▣ Event inbox</div>
+    <div class="arrow">🔔 doorbell ↓</div>
+    <div class="step">◷ Wake watcher</div>
+    <div class="arrow">starts ↓</div>
+    <div class="step agent">◆ Working agent</div>
+    <div class="arrow">↖ reads work · records progress</div>
+  </div>
+  <div class="prim hub"><b>Event inbox <small>(hub)</small></b>An append-only log of typed events with stable IDs, plus wake rules. One tiny process (or a service). The log is the truth.</div>
+  <div class="prim sub"><b>Wake rule and bookmark <small>(subscription + cursor)</small></b>Which events matter, how far the agent got, and how often it may wake.</div>
+  <div class="prim ping"><b>Doorbell <small>(thin ping)</small></b><code>{hub, subscription, cursor, pending}</code> — never a payload. It only tells the wake watcher that work is waiting.</div>
 
   <h2>Quickstart</h2>
   <pre><code><span class="c"># install (Node ≥ 20, zero dependencies)</span>
@@ -109,14 +136,17 @@ npm install -g github:nicolaerusan/agent-wake
 <span class="c"># terminal 1 — the hub: durable event log + mailbox</span>
 agent-wake hub
 
-<span class="c"># terminal 2 — wake an agent CLI on every event</span>
+<span class="c"># terminal 2 — visible demo, no AI account required</span>
+agent-wake watch <span class="k">--echo</span>
+
+<span class="c"># or wake a real agent CLI on every event</span>
 agent-wake watch <span class="k">--claude</span>    <span class="c"># Claude Code</span>
 agent-wake watch <span class="k">--codex</span>     <span class="c"># ...or Codex</span>
 agent-wake watch --cmd 'node my-agent.mjs'   <span class="c"># ...or anything</span>
 
 <span class="c"># terminal 3 — play the world: emit an event</span>
 agent-wake emit task.created --data '{"title":"hello"}'</code></pre>
-  <p>The watcher long-polls the hub’s mailbox over an outbound connection (NAT-proof, no public URL), and on each ping shells out to the agent with the ping in <code>$WAKE_PING</code>. The agent cold-starts, reads its pending events, handles them, acks its cursor, and exits. Filter with <code>--types a,b</code>; pass extra flags to the agent CLI after <code>--</code>.</p>
+  <p>The wake watcher long-polls the event inbox over an outbound connection (NAT-proof, no public URL). When the doorbell rings, it starts a fresh working agent. Today that can be <code>claude -p</code>, <code>codex exec</code>, any local command, or a BB thread. Desktop and hosted services need product-specific adapters. See the <a href="https://github.com/nicolaerusan/agent-wake/blob/main/ARCHITECTURE.md">concrete architecture guide</a>.</p>
 
   <h2>Claude Code &amp; Codex</h2>
   <pre><code><span class="c"># headless claude needs permission to curl the hub</span>
@@ -134,18 +164,18 @@ bb wake emit task.created '{"title":"hello"}'</code></pre>
   <h2>Why thin pings?</h2>
   <ul>
     <li><b>Polling is always a valid fallback</b> — push is just lower latency, so nothing breaks when a webhook is missed.</li>
-    <li><b>Exactly-once processing without exactly-once delivery</b> — the cursor at the hub is the truth, not the ping.</li>
-    <li><b>Agents can be processes, containers, or nothing at all</b> — the wake target is a spawner; a cold agent reconstructs everything from <code>hub + subscription + cursor</code>.</li>
+    <li><b>At-least-once processing with durable progress</b> — the cursor at the event inbox is the truth, not the doorbell; consumers use event IDs to make external writes idempotent.</li>
+    <li><b>Agents can be local processes or hosted jobs</b> — the wake target is a small wake watcher; it can start <code>claude -p</code>, <code>codex exec</code>, a BB thread, a container, or a future cloud adapter.</li>
     <li><b>Wake economics live in the subscription</b> — min intervals and coalescing keep a chatty event source from becoming a token firehose.</li>
   </ul>
 
   <h2>Security, honestly</h2>
-  <p>The reference hub is <b>unauthenticated localhost plumbing</b> — don’t bind it to the internet. Two risks are unique to waking <em>agents</em>: event data is <b>prompt-injection surface</b> (an LLM with tools reads attacker-authored text, so subscribe only to sources you trust and scope the woken agent’s permissions tightly), and the woken agent must <b>never trust the ping’s hub URL</b> — it reads from its configured hub, so a forged ping can at worst make it poll its own log. Subscription ownership (create-time secrets, per-source emit credentials, signed pings for push) is the first post-MVP milestone. The full threat model and hardening roadmap live in <a href="https://github.com/nicolaerusan/agent-wake/blob/main/SECURITY.md">SECURITY.md</a>; the <a href="https://nicolaerusan.com/writing/push-vs-pull-agents">essay</a> covers the why.</p>
+  <p>The reference hub is <b>unauthenticated localhost plumbing</b> — don’t bind it to the internet. Event data is <b>prompt-injection surface</b>, filters currently gate wakes but not reads, and cursor acknowledgements still need authentication and strict bounds. The wake watcher must use its configured event inbox rather than trust a URL inside the doorbell. Capabilities, subscription-scoped reads, source credentials, wake budgets, parking, and signed push are roadmap items, not shipped protections. The full threat model and shipping order live in <a href="https://github.com/nicolaerusan/agent-wake/blob/main/SECURITY.md">SECURITY.md</a>.</p>
 
   <p>Prior art it steals from: CloudEvents (envelope) · Standard Webhooks (signing) · WebSub (subscribe/deliver) · ActivityPub (inbox as identity) · SMTP/MX (standardize addressability, not hosting).</p>
 
   <footer>
-    <a href="https://github.com/nicolaerusan/agent-wake">github.com/nicolaerusan/agent-wake</a> — reference hub, spawner, conformance tests, and the BB plugin. MIT-spirited; the conformance tests are the standard until the prose catches up.
+    <a href="https://github.com/nicolaerusan/agent-wake">github.com/nicolaerusan/agent-wake</a> — event inbox, wake watcher, conformance tests, and the BB plugin. MIT-spirited; the conformance tests are the standard until the prose catches up.
   </footer>
 </main>
 </body>

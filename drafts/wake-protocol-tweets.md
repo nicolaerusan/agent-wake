@@ -26,11 +26,11 @@ Normal webhooks push payloads, so reliability machinery grows around delivery: r
 Instead: events live in a durable append-only log. The ping just says "something's waiting, here's your cursor." The agent goes and reads.
 
 5/
-The whole standard is three primitives:
+The whole standard is three primitives (friendly names first):
 
-• event hub: typed events, stable IDs, per-stream order
-• subscription: filter + delivery target + cursor
-• thin ping: {hub, subscription, cursor, pending}
+• event inbox (hub): typed events, stable IDs, per-stream order
+• wake rule + bookmark (subscription + cursor)
+• doorbell (thin ping): {hub, subscription, cursor, pending}
 
 Dropped ping? Duplicate? Agent offline a week? Cursor catches up. Push is just a latency optimization over pull.
 
@@ -48,11 +48,11 @@ Push vs pull isn't a religious choice, it's a delivery mode:
 Same subscription, same cursor. Most agents live on laptops; pull is the mode that makes them first-class.
 
 8/
-And the wake target shouldn't be a running process — it's a *spawner*.
+And the wake target shouldn't be a running process — it's a *wake watcher*.
 
-Ping → agent cold-starts with zero local state → reconstructs everything from hub + subscription + cursor → works → acks → exits.
+Doorbell → a small background service starts `claude -p`, `codex exec`, a BB thread, or a hosted job → the working agent reads its inbox, works, records progress, exits.
 
-Agent identity lives at the hub. Compute is wherever inference happens today.
+The code calls this watcher a spawner, but it isn't another intelligent agent. It's boring plumbing. Durable progress lives in the event inbox. Compute is wherever the working agent runs today.
 
 9/
 This also unifies "automations." A cron trigger, a GitHub event, an email, another agent's output — all just event sources feeding hubs. IFTTT/Zapier proved the trigger→action economy works; it just isn't open. An open hub + subscription standard is that, but federated.

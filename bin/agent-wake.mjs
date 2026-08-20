@@ -6,13 +6,15 @@
 //   agent-wake emit   <type> [--hub URL] [--data JSON] [--source S]
 //   agent-wake events [--hub URL] [--after N] [--types a,b]
 //   agent-wake watch  [--hub URL] [--sub ID] [--types a,b]
-//                     (--claude | --codex | --cmd '...') [-- extra agent args]
+//                     (--echo | --claude | --codex | --cmd '...') [-- extra agent args]
 //
-// `watch` is the integration point: --claude wakes `claude -p`, --codex wakes
-// `codex exec`, --cmd wakes anything. If --sub is omitted a subscription is
-// created for you (from head) and printed so you can reuse it.
+// `watch` is the integration point: --echo runs the bundled visible demo,
+// --claude wakes `claude -p`, --codex wakes `codex exec`, and --cmd wakes
+// anything. If --sub is omitted a subscription is created for you (from head)
+// and printed so you can reuse it.
 
 import { parseArgs } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 const ROOT = new URL('..', import.meta.url);
 const [cmd, ...rest] = process.argv.slice(2);
@@ -62,10 +64,11 @@ function usage(code = 0) {
   agent-wake emit   <type> [--hub URL] [--data JSON] [--source S]
   agent-wake events [--hub URL] [--after N] [--types a,b]
   agent-wake watch  [--hub URL] [--sub ID] [--types a,b]
-                    (--claude | --codex | --cmd '...') [-- extra agent args]
+                    (--echo | --claude | --codex | --cmd '...') [-- extra agent args]
 
 examples
   agent-wake hub
+  agent-wake watch --echo                  # no AI account required
   agent-wake watch --claude                # wake Claude Code on every event
   agent-wake watch --codex --types deploy.finished
   agent-wake watch --cmd 'node my-agent.mjs'
@@ -138,17 +141,19 @@ switch (cmd) {
       types: { type: 'string' },
       claude: { type: 'boolean', default: false },
       codex: { type: 'boolean', default: false },
+      echo: { type: 'boolean', default: false },
       cmd: { type: 'string' },
       'wait-timeout': { type: 'string', default: '25' },
     });
 
     const extra = passthrough.length ? ' ' + passthrough.map(shellQuote).join(' ') : '';
     let wakeCmd;
-    if (values.cmd) wakeCmd = values.cmd + extra;
+    if (values.echo) wakeCmd = `node ${shellQuote(fileURLToPath(new URL('../examples/echo-agent.mjs', import.meta.url)))}`;
+    else if (values.cmd) wakeCmd = values.cmd + extra;
     else if (values.claude) wakeCmd = `claude -p ${shellQuote(WAKE_PROMPT)}${extra}`;
     else if (values.codex) wakeCmd = `codex exec ${shellQuote(WAKE_PROMPT)}${extra}`;
     else {
-      console.error('watch: pick an agent with --claude, --codex, or --cmd \'...\'');
+      console.error('watch: pick a target with --echo, --claude, --codex, or --cmd \'...\'');
       process.exit(1);
     }
 

@@ -1,5 +1,5 @@
 // End-to-end over the CLI: `agent-wake hub`, `agent-wake sub/emit/events`,
-// and `agent-wake watch --cmd` waking a real agent process.
+// and `agent-wake watch --echo` waking the bundled visible target.
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,9 +11,6 @@ import os from 'node:os';
 const ROOT = new URL('..', import.meta.url).pathname;
 const CLI = path.join(ROOT, 'bin/agent-wake.mjs');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-wake-cli-'));
-const OUT_FILE = path.join(tmp, 'processed.txt');
-fs.writeFileSync(OUT_FILE, '');
-
 let hub;
 let HUB_URL;
 let watcher;
@@ -53,18 +50,23 @@ test('sub / emit / events round-trip through the CLI', () => {
   assert.deepEqual(events[0].data, { n: 1 });
 });
 
-test('watch --cmd auto-creates a subscription and wakes the agent', async () => {
+test('watch --echo auto-creates a subscription and wakes the bundled target', async () => {
   watcher = spawn(
     'node',
     [
       CLI, 'watch',
       '--hub', HUB_URL,
-      '--cmd', `node ${path.join(ROOT, 'test/fixtures/test-agent.mjs')}`,
+      '--echo',
       '--wait-timeout', '2',
     ],
-    { env: { ...process.env, OUT_FILE } },
+    { env: process.env },
   );
   watcher.stderr.on('data', (d) => process.stderr.write(`[watch] ${d}`));
+
+  let output = '';
+  watcher.stdout.on('data', (d) => {
+    output += String(d);
+  });
 
   await new Promise((resolve, reject) => {
     watcher.stdout.on('data', (d) => {
@@ -77,9 +79,9 @@ test('watch --cmd auto-creates a subscription and wakes the agent', async () => 
 
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
-    if (fs.readFileSync(OUT_FILE, 'utf8').trim()) break;
+    if (output.includes('echo-agent: acked cursor=')) break;
     await new Promise((r) => setTimeout(r, 100));
   }
-  const ids = fs.readFileSync(OUT_FILE, 'utf8').split('\n').filter(Boolean);
-  assert.ok(ids.length >= 1, 'agent processed the emitted event');
+  assert.match(output, /echo-agent: \[evt_\d+\] task\.created/);
+  assert.match(output, /echo-agent: acked cursor=\d+, going back to sleep/);
 });

@@ -6,18 +6,32 @@ Push vs pull agents, unified: events live in a durable append-only hub; agents h
 
 Landing page: https://nicolaerusan.github.io/agent-wake/ · Companion essay: *Push vs Pull Agents, and the Case for a Wake Standard* (nicolaerusan.com/writing/push-vs-pull-agents).
 
+New to the terminology? [How agent-wake fits into the agents people use today](ARCHITECTURE.md)
+explains the event inbox, wake watcher, and working agent with concrete Claude
+Code, Codex, BB, desktop, and hosted examples.
+
+Want to see it work first? [Try it in five minutes](TRY_IT.md), with no API key
+or AI account required.
+
+Exploring a shared service? [Global event bus, spaces, and agent publishing](GLOBAL_EVENT_BUS.md)
+defines spaces as the security boundary, covers agent feedback loops, and maps
+where an optional policy layer such as White Circle could fit.
+
 ## The three primitives
 
-- **Hub** — append-only log of typed events (CloudEvents-ish envelope), stable IDs, per-stream order.
-- **Subscription** — filter + delivery target + cursor + wake economics (`min_interval_s`, `batch_window_s`, parking).
-- **Thin ping** — `{hub, subscription, cursor, pending}`. The agent reads events after its cursor from the hub and acks.
+- **Event inbox (hub)** — append-only log of typed events (CloudEvents-ish envelope), stable IDs, per-stream order.
+- **Wake rule and bookmark (subscription + cursor)** — filter + delivery target + progress + wake economics (`min_interval_s`, `batch_window_s`, parking).
+- **Doorbell (thin ping)** — `{hub, subscription, cursor, pending}`. It only says work is waiting; the agent reads from the inbox and records progress.
 
 Two delivery modes over one model:
 
 - `poll` (mandatory): long-poll mailbox — `GET /subscriptions/:id/wait`. NAT-proof, no public URL needed.
 - `webhook` (optimization): signed thin ping, Standard-Webhooks headers, WebSub-style verification.
 
-The wake target is a *spawner*, not a process: a cold-started agent reconstructs everything from hub + subscription + cursor.
+The wake target is a **wake watcher** (called the spawner in the implementation),
+not an already-running agent. The watcher is boring background plumbing that
+starts a fresh working agent when the doorbell rings. See [the concrete deployment
+guide](ARCHITECTURE.md) for local CLI, desktop, BB, and hosted arrangements.
 
 ## Install (one line, zero dependencies, Node ≥20)
 
@@ -33,7 +47,10 @@ Three terminals — hub, watcher, and you playing the world:
 # 1. the hub — durable event log + subscriptions + mailbox
 agent-wake hub                          # http://localhost:7777, data/ for state
 
-# 2. the watcher — wakes an agent CLI on every event (subscription auto-created)
+# 2. the watcher — start with the bundled visible demo (no AI account needed)
+agent-wake watch --echo
+
+# then try a real agent CLI (subscription auto-created)
 agent-wake watch --claude               # wake Claude Code
 agent-wake watch --codex                # ...or Codex
 agent-wake watch --cmd 'node examples/echo-agent.mjs'   # ...or anything
@@ -82,12 +99,13 @@ Non-goals for the MVP: hub federation, discovery, payment, framework integration
 
 ## Security posture (read before pointing this at anything real)
 
-The reference hub is **deliberately unauthenticated localhost plumbing**. Do not bind it to the internet. The full threat model — eight risks, current status of each, and the designed fixes in shipping order — lives in [SECURITY.md](SECURITY.md). The short version:
+The reference hub is **deliberately unauthenticated localhost plumbing**. Do not bind it to the internet. The full threat model — including prompt injection, cursor suppression, filtered-read isolation, wake economics, and duplicate external effects — lives in [SECURITY.md](SECURITY.md). The short version:
 
 - **Anyone who can reach the hub can do anything**: emit events (with any spoofed `source`), read the whole log, create subscriptions, and — subtlest — **ack someone else's cursor forward, silently suppressing their events**. Subscription ownership (create-time secrets, per-source emit credentials) is the first post-MVP security milestone; until then, the trust boundary is "who can reach the port."
 - **Event data is prompt-injection surface.** A woken agent reads attacker-authored `data` inside a reasoning loop that has tools. Only subscribe to event sources you trust, and give the woken agent the narrowest permissions that do the job (e.g. `--allowedTools 'Bash(curl:*)'`, not full access).
-- **Never trust the ping — including its `hub` URL.** "Forged pings are harmless" only holds if the agent reads from its *configured* hub. In pull mode this is automatic (the spawner only talks to `HUB_URL`); push mode requires signed pings before it ships.
+- **Never trust the ping — including its `hub` URL.** "Forged pings are harmless" only holds if the agent reads from its *configured* event inbox. The wake watcher must validate or replace the ping context before starting the child; push mode additionally requires signed pings before it ships.
 - **Wake economics are the DoS defense**: min intervals, coalescing, and parking keep an event flood from becoming a token bill. The spawner backs off exponentially when the agent fails, but a poison event still re-wakes until acked or skipped — dead-lettering is on the roadmap.
+- **Processing is at least once.** If an agent completes an external write and crashes before recording progress, the event is delivered again. Consumers must make side effects idempotent using the stable event ID or destination-side checks.
 
 ## Prior art we steal from
 

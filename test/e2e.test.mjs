@@ -1,6 +1,6 @@
 // End-to-end: hub + spawner + a real spawned agent process, black-box over HTTP.
 // This is the seed of the conformance suite — the properties tested here
-// (exactly-once processing via cursors, restart resume, filter gating,
+// (ordered successful processing via cursors, restart resume, filter gating,
 // durability) are the standard until the prose catches up.
 //
 //   node --test test/
@@ -85,7 +85,7 @@ after(() => {
   hub?.kill();
 });
 
-test('spawner wakes a cold agent which processes events exactly once, in order', async () => {
+test('spawner wakes a cold agent which processes a successful batch once, in order', async () => {
   startSpawner(sub.id);
   await emit('task.created', { n: 1 });
   await emit('task.created', { n: 2 });

@@ -8,7 +8,7 @@
   },
   "bb": {
     "name": "Agent Wake",
-    "description": "Wake BB threads from agent-wake hub events: long-polls a subscription and spawns a thread per thin ping.",
+    "description": "Wake BB threads from an agent-wake event inbox: watches a wake rule and starts a working-agent thread when its doorbell rings.",
     "branding": {
       "icon": "Zap"
     },
