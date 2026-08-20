@@ -2,6 +2,7 @@
   "name": "agent-wake",
   "version": "0.1.0",
   "type": "module",
+  "license": "MIT",
   "description": "Wake agents from events: a vendor-neutral event hub, subscriptions with cursors, thin pings, and a spawner that wakes Claude Code, Codex, or any agent CLI.",
   "bin": {
     "agent-wake": "bin/agent-wake.mjs"
