@@ -11,7 +11,11 @@
     "bin/",
     "hub.mjs",
     "spawner.mjs",
-    "examples/"
+    "mcp.mjs",
+    "ingest.mjs",
+    "examples/",
+    "SECURITY.md",
+    "ARCHITECTURE.md"
   ],
   "repository": {
     "type": "git",
@@ -19,7 +23,7 @@
   },
   "scripts": {
     "hub": "node hub.mjs",
-    "test": "node --test test/e2e.test.mjs test/cli.test.mjs"
+    "test": "node --test test/*.test.mjs"
   },
   "engines": {
     "node": ">=20"

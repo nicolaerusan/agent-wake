@@ -96,6 +96,49 @@ Use TLS when the hub leaves localhost, and follow guidance that stays true at ev
 
 **Mitigation:** specify at-least-once processing. Give every event a stable id and require consumers to use it as an idempotency key, keep a destination-side receipt, or inspect whether an intended external effect already happened before repeating it.
 
+## The two components that face outward
+
+The hub is localhost plumbing. Two optional pieces are designed to sit
+between it and everything else, and their security properties are worth
+stating separately.
+
+### `agent-wake ingest` — the webhook bridge
+
+This is what an external system should POST to, never the hub. It exists so
+that "who may emit into this inbox" is an enforced boundary rather than a
+convention.
+
+**What it enforces today:** a shared token (header or query parameter,
+compared in constant time) for `/hook/<name>`; HMAC-SHA256 verification of
+`X-Hub-Signature-256` over the exact received bytes for `/github`; refusal to
+start with no credentials configured; a 256KB body cap; localhost binding
+unless `--bind` is passed explicitly. Crucially, **the caller cannot name
+itself**: `type` and `source` are derived from the authenticated route and
+sanitized, so a body claiming `source: github` is ignored. This closes risk
+#4 for events that arrive through the bridge.
+
+**What it does not do yet:** no per-sender rate limiting (wake economics
+still belong hub-side, risk #5), no replay protection or delivery-id
+deduplication (a captured signed GitHub delivery can be replayed; the cursor
+model makes that harmless to *correctness*, but it still costs a wake), no
+TLS of its own — terminate it in front if you expose it. And provenance is
+not content safety: a correctly signed GitHub delivery still carries text an
+attacker wrote, which is risk #1 unchanged.
+
+### `agent-wake mcp` — read-first access for agents
+
+An MCP server that lets an assistant you are already talking to scan the
+inbox without waking anything. It is deliberately ordered by authority:
+reads are always available, `wake_emit_event` is on by default and removed by
+`--read-only`, and `wake_ack` is **off** unless `--allow-ack` — because
+advancing a cursor is the one operation that silently destroys work
+(risk #2), and an MCP-connected model reading attacker-authored event text is
+exactly the case where that matters.
+
+Every tool that returns event bodies states in its own description that event
+data is untrusted input to reason about, never instructions to follow. That
+is a mitigation, not a solution; risk #1 stands.
+
 ## Security is layered
 
 The hub decides **what may wake, what may be read, and how often a run may start**. The agent runner or hosted agent service decides **what that run may do**. A production integration should combine:

@@ -7,6 +7,8 @@
 //   agent-wake events [--hub URL] [--after N] [--types a,b]
 //   agent-wake watch  [--hub URL] [--sub ID] [--types a,b]
 //                     (--echo | --claude | --codex | --cmd '...') [-- extra agent args]
+//   agent-wake mcp    [--hub URL] [--read-only] [--allow-ack]
+//   agent-wake ingest --token SECRET [--hub URL] [--port N] [--github-secret S]
 //
 // `watch` is the integration point: --echo runs the bundled visible demo,
 // --claude wakes `claude -p`, --codex wakes `codex exec`, and --cmd wakes
@@ -65,6 +67,10 @@ function usage(code = 0) {
   agent-wake events [--hub URL] [--after N] [--types a,b]
   agent-wake watch  [--hub URL] [--sub ID] [--types a,b]
                     (--echo | --claude | --codex | --cmd '...') [-- extra agent args]
+  agent-wake mcp    [--hub URL] [--read-only] [--allow-ack]
+                                                      MCP server: scan events from any agent
+  agent-wake ingest --token SECRET [--port N] [--github-secret S]
+                                                      receive webhooks -> events
 
 examples
   agent-wake hub
@@ -72,7 +78,9 @@ examples
   agent-wake watch --claude                # wake Claude Code on every event
   agent-wake watch --codex --types deploy.finished
   agent-wake watch --cmd 'node my-agent.mjs'
-  agent-wake emit task.created --data '{"title":"hello"}'`);
+  agent-wake emit task.created --data '{"title":"hello"}'
+  agent-wake mcp --read-only               # let an assistant scan, never write
+  agent-wake ingest --token hunter2        # curl -H 'X-Wake-Token: hunter2' localhost:7788/hook/ci`);
   process.exit(code);
 }
 
@@ -171,6 +179,20 @@ switch (cmd) {
     process.env.WAKE_CMD = wakeCmd;
     process.env.WAIT_TIMEOUT_S = values['wait-timeout'];
     await import(new URL('spawner.mjs', ROOT));
+    break;
+  }
+
+  case 'mcp': {
+    // The MCP server parses its own flags (and may be launched directly by a
+    // client config), so hand it the argv we were given.
+    process.argv = [process.argv[0], 'mcp', ...argv];
+    await import(new URL('mcp.mjs', ROOT));
+    break;
+  }
+
+  case 'ingest': {
+    process.argv = [process.argv[0], 'ingest', ...argv];
+    await import(new URL('ingest.mjs', ROOT));
     break;
   }
 

@@ -68,6 +68,87 @@ subscription with `--sub sub_x`, point elsewhere with `--hub URL`.
 The raw pieces are still there for scripting: `node hub.mjs`, `node
 spawner.mjs` (env-driven), plus `agent-wake sub` / `emit` / `events`.
 
+## Receiving webhooks (events from the outside world)
+
+The hub has no authentication, so it must never be the thing a stranger
+POSTs to. `agent-wake ingest` is the piece that faces outward: it
+authenticates the sender, decides the event type and source itself, and only
+then writes into the hub.
+
+```sh
+agent-wake ingest --token hunter2                    # 127.0.0.1:7788 by default
+
+curl -X POST localhost:7788/hook/ci \
+  -H 'X-Wake-Token: hunter2' \
+  -d '{"repo":"agent-wake","status":"failed"}'       # -> event hook.ci, source hook:ci
+```
+
+GitHub can deliver straight to it, proving itself with its own HMAC instead
+of the shared token — point a repository webhook at `/github` with the same
+secret:
+
+```sh
+agent-wake ingest --token hunter2 --github-secret "$GH_WEBHOOK_SECRET"
+# POST /github  ->  event type github.<X-GitHub-Event>, source github
+```
+
+What the bridge guarantees, and what it deliberately does not:
+
+- **The caller cannot name itself.** `type` and `source` are derived from the
+  authenticated route (`/hook/ci` → `hook.ci`, `source: hook:ci`), never read
+  from the body, so nothing can claim to be `source: github`.
+- **Unauthenticated requests never reach the hub** — no token, wrong token, or
+  a bad GitHub signature is refused before any event is written.
+- **It binds to localhost** unless you pass `--bind` explicitly. Exposing it
+  (directly or through a tunnel) means accepting that whoever holds the token
+  can wake your agents, so pair it with the wake economics you want.
+- **Provenance is not content safety.** A correctly signed GitHub delivery
+  still carries issue text an attacker wrote. See [SECURITY.md](SECURITY.md).
+
+## Scanning events from any agent (MCP)
+
+The read-only way to use agent-wake: no waking, no spawning, no standing
+process. An assistant you are *already* talking to can look at what arrived.
+
+```sh
+agent-wake mcp --read-only     # stdio MCP server: scan events, never write
+```
+
+Register it once and ask questions like "what has come in since this
+morning?" or "what is subscription sub_1jhe behind on?":
+
+```sh
+claude mcp add agent-wake -- agent-wake mcp --read-only
+```
+
+```jsonc
+// Claude Desktop, Cursor, and friends: mcpServers config
+{ "mcpServers": { "agent-wake": { "command": "agent-wake", "args": ["mcp", "--read-only"] } } }
+```
+
+```toml
+# Codex CLI: ~/.codex/config.toml
+[mcp_servers.agent_wake]
+command = "agent-wake"
+args = ["mcp", "--read-only"]
+```
+
+Tools, ordered by how much authority they need:
+
+| Tool | Authority | What it does |
+| --- | --- | --- |
+| `wake_scan_events` | read | Recent events, filtered by type or source |
+| `wake_pending` | read | What one subscription has not processed yet |
+| `wake_list_subscriptions` | read | Every wake rule, its filter, cursor, and backlog |
+| `wake_emit_event` | write (on by default; `--read-only` removes it) | Post a new event |
+| `wake_ack` | **off** unless `--allow-ack` | Advance a cursor past handled events |
+
+`wake_ack` is opt-in because advancing a cursor is the one operation that can
+*silently* destroy work — the suppression risk in [SECURITY.md](SECURITY.md).
+Every tool that returns event bodies tells the model, in its own description,
+that event data is untrusted input to reason about rather than instructions
+to follow.
+
 ## BB plugin
 
 The repo doubles as a [bb](https://getbb.app) plugin collection —

@@ -169,6 +169,16 @@ bb wake emit task.created '{"title":"hello"}'</code></pre>
     <li><b>Wake economics live in the subscription</b> — min intervals and coalescing keep a chatty event source from becoming a token firehose.</li>
   </ul>
 
+  <h2>Webhooks in, MCP out</h2>
+  <p>Anything can send events in, and any MCP-capable agent can read them out — without waking a thing:</p>
+  <pre><code><span class="c"># receive webhooks from the outside world (auth required; localhost by default)</span>
+agent-wake ingest <span class="k">--token</span> hunter2 [--github-secret "$SECRET"]
+curl -X POST localhost:7788/hook/ci -H 'X-Wake-Token: hunter2' -d '{"status":"failed"}'
+
+<span class="c"># let an assistant you are already talking to scan what arrived</span>
+claude mcp add agent-wake -- agent-wake mcp <span class="k">--read-only</span></code></pre>
+  <p>The bridge derives the event <code>type</code> and <code>source</code> from the authenticated route, so a caller can never claim to be someone else, and unauthenticated requests never reach the inbox. The MCP server is ordered by authority: reading is always allowed, emitting is on by default, and <code>wake_ack</code> — the one call that can silently destroy work — stays off unless you ask for it.</p>
+
   <h2>Security, honestly</h2>
   <p>The reference hub is <b>unauthenticated localhost plumbing</b> — don’t bind it to the internet. Event data is <b>prompt-injection surface</b>, filters currently gate wakes but not reads, and cursor acknowledgements still need authentication and strict bounds. The wake watcher must use its configured event inbox rather than trust a URL inside the doorbell. Capabilities, subscription-scoped reads, source credentials, wake budgets, parking, and signed push are roadmap items, not shipped protections. The full threat model and shipping order live in <a href="https://github.com/nicolaerusan/agent-wake/blob/main/SECURITY.md">SECURITY.md</a>.</p>
 

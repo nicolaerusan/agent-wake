@@ -3,6 +3,7 @@
 //
 //   POST /events                        {type, source?, data?} -> {id, seq}
 //   GET  /events?after=<seq>&types=a,b  -> {events: [...], cursor}
+//   GET  /subscriptions                 -> [subscription, ...]
 //   POST /subscriptions                 {filter?: {types?}, from?: 'head'|'start'} -> subscription
 //   GET  /subscriptions/:id             -> subscription
 //   GET  /subscriptions/:id/wait?timeout=25  -> thin ping, or 204 at timeout
@@ -114,6 +115,11 @@ const server = http.createServer(async (req, res) => {
         (e) => e.seq > after && (!types?.length || types.includes(e.type)),
       );
       return json(res, 200, { events: out, cursor: String(head()) });
+    }
+
+    // GET /subscriptions — the wake rules on this inbox (no event payloads)
+    if (req.method === 'GET' && url.pathname === '/subscriptions') {
+      return json(res, 200, [...subs.values()]);
     }
 
     // POST /subscriptions
